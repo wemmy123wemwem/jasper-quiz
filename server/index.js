@@ -16,6 +16,75 @@ app.get('/team', (req, res) => res.sendFile(path.join(__dirname, '..', 'public',
 app.get('/jasper', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'jasper.html')));
 app.get('/projector', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'projector.html')));
 
+// ---------- Setup page (creates a fresh game session — visit this once before the event) ----------
+app.get('/setup-jasper-quiz-2026', (req, res) => {
+  try {
+    const fs = require('fs');
+    const contentPath = fs.existsSync(path.join(__dirname, '..', 'content', 'session.json'))
+      ? path.join(__dirname, '..', 'content', 'session.json')
+      : path.join(__dirname, '..', 'content', 'session.example.json');
+    const content = JSON.parse(fs.readFileSync(contentPath, 'utf8'));
+
+    function randomCode(len = 5) {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      return Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    }
+
+    const sessionId = nanoid();
+    const roomCode = randomCode();
+    const hostSecret = nanoid(12);
+
+    db.prepare(`INSERT INTO sessions (id, room_code, host_secret, status, created_at) VALUES (?, ?, ?, 'lobby', ?)`)
+      .run(sessionId, roomCode, hostSecret, Date.now());
+
+    content.rounds.forEach((round, ri) => {
+      const roundId = nanoid();
+      db.prepare(`INSERT INTO rounds (id, session_id, sequence, title) VALUES (?, ?, ?, ?)`)
+        .run(roundId, sessionId, ri, round.title);
+
+      round.questions.forEach((q, qi) => {
+        const questionId = nanoid();
+        db.prepare(`INSERT INTO questions
+          (id, round_id, session_id, sequence, status, public_display, team_view, jasper_view,
+           excluded_participant_ids, answer_key, accepted_answers, marking_notes, scoring, assets, reveal_content, host_notes)
+          VALUES (@id, @round_id, @session_id, @sequence, 'draft', @public_display, @team_view, @jasper_view,
+           @excluded_participant_ids, @answer_key, @accepted_answers, '', @scoring, @assets, @reveal_content, '')`)
+          .run({
+            id: questionId,
+            round_id: roundId,
+            session_id: sessionId,
+            sequence: qi,
+            public_display: JSON.stringify(q.public_display),
+            team_view: JSON.stringify(q.team_view),
+            jasper_view: JSON.stringify(q.jasper_view),
+            excluded_participant_ids: JSON.stringify(q.excluded_participant_ids || []),
+            answer_key: JSON.stringify(q.answer_key),
+            accepted_answers: JSON.stringify(q.accepted_answers || []),
+            scoring: JSON.stringify(q.scoring),
+            assets: JSON.stringify(q.assets || []),
+            reveal_content: JSON.stringify(q.reveal_content || {})
+          });
+      });
+    });
+
+    res.send(`
+      <html><body style="font-family: sans-serif; padding: 40px; font-size: 18px; max-width: 600px;">
+        <h1>Session created!</h1>
+        <p><b>Room code (give to players):</b> ${roomCode}</p>
+        <p><b>Host link (bookmark this, keep private):</b><br>
+          <a href="/host?secret=${hostSecret}">/host?secret=${hostSecret}</a>
+        </p>
+        <p><b>Team link:</b> <a href="/team">/team</a></p>
+        <p><b>Jasper link:</b> <a href="/jasper">/jasper</a></p>
+        <p><b>Projector link:</b> <a href="/projector">/projector</a></p>
+        <p style="color:#888; margin-top:30px;">Note: visiting this page again creates a brand new session with a new room code.</p>
+      </body></html>
+    `);
+  } catch (err) {
+    res.status(500).send('Error: ' + err.message);
+  }
+});
+
 // ---------- DB helpers ----------
 const getSessionByRoomCode = (code) => db.prepare('SELECT * FROM sessions WHERE room_code = ?').get(code.toUpperCase());
 const getSessionByHostSecret = (secret) => db.prepare('SELECT * FROM sessions WHERE host_secret = ?').get(secret);
