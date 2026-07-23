@@ -121,7 +121,7 @@ function questionPayloadFor(question, role, participantId) {
     return { ...base, teamView: JSON.parse(question.team_view), jasperView: JSON.parse(question.jasper_view),
       answerKey: JSON.parse(question.answer_key), scoring: JSON.parse(question.scoring),
       revealContent: JSON.parse(question.reveal_content), hostNotes: question.host_notes,
-      excludedParticipantIds: getExcludedIds(question) };
+      excludedParticipantIds: getExcludedIds(question), visibility: question.visibility };
   }
   if (role === 'team' || role === 'jasper') {
     const view = role === 'team' ? JSON.parse(question.team_view) : JSON.parse(question.jasper_view);
@@ -270,6 +270,8 @@ io.on('connection', (socket) => {
     if (session.projector_mode === 'question' && session.projector_question_id) {
       const q = getQuestion(session.projector_question_id);
       socket.emit('projector:state', { mode: 'question', question: questionPayloadFor(q, 'projector') });
+    } else if (session.projector_mode === 'scoreboard') {
+      socket.emit('projector:state', { mode: 'scoreboard', standings: scoring.standings(session.id) });
     } else {
       socket.emit('projector:state', { mode: 'blank' });
     }
@@ -439,8 +441,14 @@ io.on('connection', (socket) => {
       io.to(roomProjector(sessionId)).emit('projector:state', { mode: 'blank' });
       return ack && ack({ ok: true });
     }
+    if (mode === 'scoreboard') {
+      db.prepare('UPDATE sessions SET projector_mode = ?, projector_question_id = NULL WHERE id = ?').run('scoreboard', sessionId);
+      io.to(roomProjector(sessionId)).emit('projector:state', { mode: 'scoreboard', standings: scoring.standings(sessionId) });
+      return ack && ack({ ok: true });
+    }
     const q = getQuestion(questionId);
     if (!q) return ack && ack({ ok: false, error: 'Question not found' });
+    if (q.visibility === 'jasper_only') return ack && ack({ ok: false, error: 'This is a Jasper-only question — it can\'t go on the shared projector.' });
     db.prepare('UPDATE sessions SET projector_mode = ?, projector_question_id = ? WHERE id = ?').run('question', q.id, sessionId);
     io.to(roomProjector(sessionId)).emit('projector:state', { mode: 'question', question: questionPayloadFor(q, 'projector') });
     ack && ack({ ok: true });
