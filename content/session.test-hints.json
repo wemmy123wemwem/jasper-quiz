@@ -1,0 +1,58 @@
+{
+  "rounds": [
+    {
+      "title": "Round 1: Warm Up",
+      "questions": [
+        {
+          "public_display": { "title": "Question 1", "body": "What year did Jasper turn 21?", "media": null, "instructions": "Choose one answer." },
+          "team_view": { "body": "What year did Jasper turn 21?", "options": ["2005", "2006", "2007", "2008"], "inputType": "single_choice",
+            "hints": ["It was during a leap year nearby.", "Think: 40th birthday minus 19."] },
+          "jasper_view": { "body": "What year did you turn 21? (No options for you.)", "options": [], "inputType": "single_choice", "hints": [] },
+          "excluded_participant_ids": [], "answer_key": { "value": "2007" }, "accepted_answers": [],
+          "scoring": { "team_base": 3, "jasper_base": -2, "jasper_correct_points": 1, "jasper_correct_no_loss": true, "hint_stage_values": [3, 2, 1], "tolerance": 0, "max_loss": 2, "team_incorrect_points": 0 },
+          "assets": [], "reveal_content": { "note": "2007 — the year of the infamous camping trip." }
+        },
+        {
+          "public_display": { "title": "Question 2", "body": "Name the Year: guess the year from the photo.", "media": null, "instructions": "Numeric answer, tolerance of ±1 year." },
+          "team_view": { "body": "What year was this photo taken?", "options": [], "inputType": "numeric",
+            "hints": ["Look at the car in the background.", "It's within a year of Jasper's graduation."] },
+          "jasper_view": { "body": "What year was this photo taken? (Exact year required, no tolerance.)", "options": [], "inputType": "numeric", "hints": [] },
+          "excluded_participant_ids": [], "answer_key": { "value": "2010" }, "accepted_answers": [],
+          "scoring": { "team_base": 3, "jasper_base": -3, "jasper_correct_points": 2, "jasper_correct_no_loss": false, "hint_stage_values": [3, 2, 1], "tolerance": 1, "max_loss": 3, "team_incorrect_points": 0 },
+          "assets": [], "reveal_content": { "note": "2010 — graduation year." }
+        },
+        {
+          "public_display": { "title": "Question 3", "body": "Which country did Jasper visit on his honeymoon?", "media": null, "instructions": "Choose one answer." },
+          "team_view": { "body": "Which country did Jasper visit on his honeymoon?", "options": ["Italy", "Portugal", "Greece", "Croatia"], "inputType": "single_choice",
+            "hints": ["Famous for its islands.", "Starts with the same letter as 'grape'."] },
+          "jasper_view": { "body": "Which country did you visit on your honeymoon? (No options for you.)", "options": [], "inputType": "single_choice", "hints": [] },
+          "excluded_participant_ids": [], "answer_key": { "value": "Greece" }, "accepted_answers": [],
+          "scoring": { "team_base": 3, "jasper_base": -2, "jasper_correct_points": 1, "jasper_correct_no_loss": true, "hint_stage_values": [3, 2, 1], "tolerance": 0, "max_loss": 2, "team_incorrect_points": 0 },
+          "assets": [], "reveal_content": { "note": "Greece — Santorini, 2015." }
+        },
+        {
+          "public_display": { "title": "Jasper Extra 1", "body": "Jasper-only bonus question (teams never see this).", "media": null, "instructions": "Jasper only." },
+          "team_view": { "body": "", "options": [], "inputType": "single_choice", "hints": [] },
+          "jasper_view": { "body": "What was your first pet's name?", "options": [], "inputType": "free_text", "hints": [] },
+          "excluded_participant_ids": [], "answer_key": { "value": "Rex" }, "accepted_answers": [],
+          "scoring": { "team_base": 0, "jasper_base": -2, "jasper_correct_points": 1, "jasper_correct_no_loss": true, "hint_stage_values": [0, 0, 0], "tolerance": 0, "max_loss": 2, "team_incorrect_points": 0 },
+          "assets": [], "reveal_content": { "note": "Rex, the family dog." },
+          "visibility": "jasper_only"
+        }
+      ]
+    },
+    {
+      "title": "Round 2: Multi-Part",
+      "questions": [
+        {
+          "public_display": { "title": "Question 4", "body": "Name the three university housemates.", "media": null, "instructions": "Free text, marked manually per part." },
+          "team_view": { "body": "Name the three university housemates (1 point each).", "options": [], "inputType": "multi_part", "hints": ["One of them now lives abroad."] },
+          "jasper_view": { "body": "Name the three university housemates.", "options": [], "inputType": "multi_part", "hints": [] },
+          "excluded_participant_ids": [], "answer_key": { "parts": ["Housemate A", "Housemate B", "Housemate C"] }, "accepted_answers": [],
+          "scoring": { "team_base": 3, "jasper_base": -3, "jasper_correct_no_loss": false, "hint_stage_values": [3, 2, 1], "per_part_value": 1, "max_loss": 3 },
+          "assets": [], "reveal_content": { "note": "Requires manual marking in the host dashboard." }
+        }
+      ]
+    }
+  ]
+}
