@@ -25,7 +25,6 @@ function doAuth(secret) {
     renderRounds();
     renderParticipants();
     renderAdjustSelect();
-    renderPatSelect();
     renderScoreboard(res.standings);
   });
 }
@@ -147,7 +146,7 @@ function renderParticipants() {
     box.appendChild(row);
   });
 }
-socket.on('participant:joined', (p) => { participants.push({ ...p, connected: 1 }); renderParticipants(); renderAdjustSelect(); renderPatSelect(); });
+socket.on('participant:joined', (p) => { participants.push({ ...p, connected: 1 }); renderParticipants(); renderAdjustSelect(); });
 socket.on('participant:disconnected', ({ id }) => { const p = participants.find(x => x.id === id); if (p) p.connected = 0; renderParticipants(); });
 
 // --- Submissions ---
@@ -192,10 +191,7 @@ function renderAdjustSelect() {
   const sel = $('adjustParticipant');
   sel.innerHTML = participants.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 }
-function renderPatSelect() {
-  const sel = $('patParticipant');
-  sel.innerHTML = participants.filter(p => p.type === 'team').map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-}
+
 
 $('adjustBtn').onclick = () => {
   const participantId = $('adjustParticipant').value;
@@ -231,18 +227,3 @@ function renderLedgerLog() {
     box.appendChild(row);
   });
 }
-
-// --- Phone a Friend ---
-$('patBtn').onclick = () => {
-  const participantId = $('patParticipant').value;
-  if (!participantId) return;
-  const roundId = (rounds[0] && rounds[0].id) || null; // simple default; refine per-round selection if needed
-  socket.emit('host:issuePatToken', { participantId, roundId, source: 'base' }, () => {});
-};
-socket.on('pat:issued', ({ participantId }) => {
-  const p = participants.find(x => x.id === participantId);
-  const line = document.createElement('div');
-  line.className = 'muted';
-  line.textContent = `Phone a Friend token issued to ${p ? p.name : participantId}`;
-  $('submissionsList').prepend(line);
-});

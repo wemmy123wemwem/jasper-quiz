@@ -80,7 +80,7 @@ function renderRoundNav() {
     const b = document.createElement('button');
     b.className = 'secondary';
     if (q.id === selectedQuestionId) b.style.background = 'var(--accent2)';
-    b.textContent = `Q${i + 1}${q.myAnswer != null ? ' ✓' : ''}`;
+    b.textContent = `${q.public.title || ('Q' + (i + 1))}${q.myAnswer != null ? ' ✓' : ''}`;
     b.onclick = () => { selectedQuestionId = q.id; renderRoundNav(); renderSelectedQuestion(); };
     nav.appendChild(b);
   });
@@ -181,33 +181,6 @@ $('submitBtn').onclick = () => {
     renderSelectedQuestion();
   });
 };
-
-socket.on('pat:issued', ({ id, roundId }) => {
-  $('patArea').innerHTML = `<button id="useTokenBtn_${id}">Use Phone a Friend token</button>`;
-  document.getElementById(`useTokenBtn_${id}`).onclick = () => {
-    socket.emit('team:usePatToken', { tokenId: id }, (res) => {
-      if (res.ok) $('patArea').innerHTML = '<span class="muted">Token used.</span>';
-      else alert(res.error);
-    });
-  };
-});
-
-socket.on('score:updated', (st) => {
-  const box = $('scoreboard');
-  box.innerHTML = '';
-  st.teams.forEach(t => {
-    const row = document.createElement('div');
-    row.className = 'scoreboard-row';
-    row.innerHTML = `<span>${t.name}${t.id === myId ? ' (you)' : ''}</span><span>${t.total}</span>`;
-    box.appendChild(row);
-  });
-  if (st.jasper) {
-    const row = document.createElement('div');
-    row.className = 'scoreboard-row jasper-row';
-    row.innerHTML = `<span>Jasper</span><span>${st.jasper.total}</span>`;
-    box.appendChild(row);
-  }
-});
 
 socket.on('session:pauseState', ({ paused }) => {
   if (paused) alert('The host has paused the quiz.');
