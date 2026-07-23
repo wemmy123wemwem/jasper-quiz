@@ -23,8 +23,34 @@ if (savedRoom) {
 }
 
 let currentProjectedQuestionId = null;
+let latestStandings = null;
+
+function renderScoreboard(st) {
+  const box = $('scoreboard');
+  box.innerHTML = '';
+  st.teams.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'scoreboard-row';
+    row.innerHTML = `<span>${t.name}</span><span>${t.total}</span>`;
+    box.appendChild(row);
+  });
+  if (st.jasper) {
+    const row = document.createElement('div');
+    row.className = 'scoreboard-row jasper-row';
+    row.innerHTML = `<span>Jasper</span><span>${st.jasper.total}</span>`;
+    box.appendChild(row);
+  }
+}
 
 socket.on('projector:state', (s) => {
+  if (s.mode === 'scoreboard') {
+    $('questionDisplay').style.display = 'none';
+    $('scoreboardDisplay').style.display = 'block';
+    renderScoreboard(s.standings || latestStandings || { teams: [] });
+    return;
+  }
+  $('scoreboardDisplay').style.display = 'none';
+  $('questionDisplay').style.display = 'block';
   $('revealBox').style.display = 'none';
   $('submissionCount').textContent = '';
   if (s.mode === 'blank' || !s.question) {
@@ -51,18 +77,6 @@ socket.on('submission:count', ({ questionId, count }) => {
 });
 
 socket.on('score:updated', (st) => {
-  const box = $('scoreboard');
-  box.innerHTML = '';
-  st.teams.forEach(t => {
-    const row = document.createElement('div');
-    row.className = 'scoreboard-row';
-    row.innerHTML = `<span>${t.name}</span><span>${t.total}</span>`;
-    box.appendChild(row);
-  });
-  if (st.jasper) {
-    const row = document.createElement('div');
-    row.className = 'scoreboard-row jasper-row';
-    row.innerHTML = `<span>Jasper</span><span>${st.jasper.total}</span>`;
-    box.appendChild(row);
-  }
+  latestStandings = st;
+  if ($('scoreboardDisplay').style.display === 'block') renderScoreboard(st);
 });

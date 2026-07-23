@@ -5,6 +5,12 @@ let selectedOption = null;
 let myId = null;
 const $ = (id) => document.getElementById(id);
 
+function inputModeFor(view) {
+  if (view.options && view.options.length > 0) return 'choice';
+  if (view.inputType === 'numeric') return 'numeric';
+  return 'text';
+}
+
 const savedToken = localStorage.getItem('quiz_jasper_token');
 const savedRoom = localStorage.getItem('quiz_jasper_room');
 
@@ -88,8 +94,10 @@ function renderSelectedQuestion() {
       b.onclick = () => { if (!editable) return; selectedOption = opt; [...optArea.children].forEach(c => c.classList.remove('selected')); b.classList.add('selected'); };
       optArea.appendChild(b);
     });
-  } else if (q.view.inputType === 'numeric') {
-    optArea.innerHTML = '<input type="number" id="numInput" placeholder="Your answer" inputmode="numeric">';
+  } else if (inputModeFor(q.view) === 'numeric') {
+    const min = q.view.min != null ? q.view.min : 1900;
+    const max = q.view.max != null ? q.view.max : (new Date().getFullYear() + 1);
+    optArea.innerHTML = `<input type="number" id="numInput" placeholder="Your answer" inputmode="numeric" min="${min}" max="${max}">`;
     if (q.myAnswer != null) $('numInput').value = q.myAnswer.value;
     $('numInput').disabled = !editable;
   } else {
@@ -129,10 +137,18 @@ function renderSelectedQuestion() {
 $('submitBtn').onclick = () => {
   const q = currentRound && currentRound.questions.find(x => x.id === selectedQuestionId);
   if (!q) return;
+  const mode = inputModeFor(q.view);
   let value = selectedOption;
-  if (q.view.inputType === 'numeric') value = $('numInput') ? $('numInput').value : null;
-  if (q.view.inputType === 'free_text' || q.view.inputType === 'multi_part') value = $('textInput') ? $('textInput').value : null;
+  if (mode === 'numeric') value = $('numInput') ? $('numInput').value : null;
+  if (mode === 'text') value = $('textInput') ? $('textInput').value : null;
   if (value === null || value === undefined || value === '') { alert('Enter or select an answer first.'); return; }
+  if (mode === 'numeric') {
+    const num = Number(value);
+    const min = q.view.min != null ? q.view.min : 1900;
+    const max = q.view.max != null ? q.view.max : (new Date().getFullYear() + 1);
+    if (Number.isNaN(num)) { alert('Please enter a number.'); return; }
+    if (num < min || num > max) { alert(`Please enter a value between ${min} and ${max}.`); return; }
+  }
   socket.emit('team:submitAnswer', { questionId: q.id, answer: { value } }, (res) => {
     if (!res.ok) { alert(res.error); return; }
     q.myAnswer = { value };

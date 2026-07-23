@@ -55,7 +55,8 @@ function renderRounds() {
       const projBtn = document.createElement('button');
       projBtn.className = 'secondary';
       projBtn.textContent = '📽 Show on projector';
-      projBtn.style.display = q.status === 'draft' ? 'none' : 'inline-block'; // can't show a question before it's opened
+      // Can't show a question before it's opened, and never for Jasper-only questions.
+      projBtn.style.display = (q.status === 'draft' || q.visibility === 'jasper_only') ? 'none' : 'inline-block';
       projBtn.onclick = () => {
         socket.emit('host:setProjector', { mode: 'question', questionId: q.id }, (res) => {
           if (res && res.ok) $('projectorNowShowing').textContent = q.public.title || 'Question';
@@ -81,6 +82,11 @@ function renderRounds() {
 $('blankProjectorBtn').onclick = () => {
   socket.emit('host:setProjector', { mode: 'blank' }, (res) => {
     if (res && res.ok) $('projectorNowShowing').textContent = 'blank / waiting screen';
+  });
+};
+$('scoreboardProjectorBtn').onclick = () => {
+  socket.emit('host:setProjector', { mode: 'scoreboard' }, (res) => {
+    if (res && res.ok) $('projectorNowShowing').textContent = 'scoreboard';
   });
 };
 

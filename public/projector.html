@@ -16,13 +16,16 @@
   </div>
 
   <div id="stage" style="display:none;">
-    <div id="qTitle" class="muted"></div>
-    <div id="qBody" class="question-body"></div>
-    <div id="submissionCount" class="muted"></div>
-    <div id="revealBox" style="display:none;"></div>
-    <hr style="border-color:#2a2e3a;margin:30px 0;">
-    <h2>Scoreboard</h2>
-    <div id="scoreboard" style="max-width:500px;margin:0 auto;font-size:1.4rem;"></div>
+    <div id="questionDisplay">
+      <div id="qTitle" class="muted"></div>
+      <div id="qBody" class="question-body"></div>
+      <div id="submissionCount" class="muted"></div>
+      <div id="revealBox" style="display:none;"></div>
+    </div>
+    <div id="scoreboardDisplay" style="display:none;">
+      <h2>Standings</h2>
+      <div id="scoreboard" style="max-width:500px;margin:0 auto;font-size:1.4rem;"></div>
+    </div>
   </div>
 </div>
 <script src="/socket.io/socket.io.js"></script>
