@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz — Projector</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap wide projector">
+  <div id="lobby">
+    <h1>Jasper's 40th — Live Quiz</h1>
+    <p class="muted">Enter the room code to display this session (ask the host).</p>
+    <input id="roomCode" style="max-width:240px;margin:0 auto;text-align:center;font-size:24px;" placeholder="ROOM CODE" autocapitalize="characters">
+    <br><button id="connectBtn">Show quiz</button>
+  </div>
+
+  <div id="stage" style="display:none;">
+    <div id="qTitle" class="muted"></div>
+    <div id="qBody" class="question-body"></div>
+    <div id="submissionCount" class="muted"></div>
+    <div id="revealBox" style="display:none;"></div>
+    <hr style="border-color:#2a2e3a;margin:30px 0;">
+    <h2>Scoreboard</h2>
+    <div id="scoreboard" style="max-width:500px;margin:0 auto;font-size:1.4rem;"></div>
+  </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/projector.js"></script>
+</body>
+</html>

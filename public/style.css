@@ -1,0 +1,81 @@
+:root {
+  --bg: #12141a;
+  --panel: #1c1f28;
+  --accent: #e8b34a;
+  --accent2: #4ac0e8;
+  --danger: #e8564a;
+  --text: #f2f2f2;
+  --muted: #9aa0ab;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+.wrap { max-width: 480px; margin: 0 auto; padding: 16px; }
+.wrap.wide { max-width: 1100px; }
+h1, h2, h3 { margin: 0 0 8px; }
+.card {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+button {
+  font-size: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: #12141a;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 4px 4px 4px 0;
+}
+button.secondary { background: #2a2e3a; color: var(--text); }
+button.danger { background: var(--danger); color: white; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+input, textarea, select {
+  font-size: 16px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #333846;
+  background: #10131a;
+  color: var(--text);
+  width: 100%;
+  margin-bottom: 8px;
+}
+.muted { color: var(--muted); font-size: 14px; }
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #2a2e3a;
+}
+.badge.open { background: var(--accent2); color: #06222c; }
+.badge.locked { background: var(--danger); color: white; }
+.badge.revealed { background: var(--accent); color: #221a06; }
+.grid { display: grid; gap: 10px; }
+.option-btn {
+  width: 100%;
+  text-align: left;
+  background: #232735;
+  color: var(--text);
+  border: 2px solid transparent;
+}
+.option-btn.selected { border-color: var(--accent); background: #2c2712; }
+.scoreboard-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #2a2e3a; }
+.scoreboard-row:last-child { border-bottom: none; }
+.jasper-row { color: var(--danger); font-weight: 700; }
+.hint { background: #232735; border-left: 3px solid var(--accent2); padding: 8px 10px; margin-top: 8px; border-radius: 6px; font-size: 14px; }
+.lockout { text-align: center; padding: 60px 20px; }
+.projector { text-align: center; padding: 40px 20px; }
+.projector h1 { font-size: 3.2rem; }
+.projector .question-body { font-size: 2.2rem; margin: 20px 0; }
+.log { font-size: 13px; color: var(--muted); max-height: 200px; overflow-y: auto; }
+a { color: var(--accent2); }

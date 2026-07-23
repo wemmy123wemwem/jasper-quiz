@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Host — Quiz Control</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap wide">
+  <div id="auth-screen" class="card">
+    <h2>Host login</h2>
+    <input id="hostSecret" placeholder="Host secret (from seed script output)">
+    <button id="authBtn">Enter</button>
+    <div id="authError" class="muted"></div>
+  </div>
+
+  <div id="dashboard" style="display:none;">
+    <div class="card">
+      <h2>Host Dashboard</h2>
+      <div id="sessionInfo" class="muted"></div>
+      <button id="pauseBtn" class="secondary">Pause</button>
+      <button id="resumeBtn" class="secondary">Resume</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div class="card">
+          <h3>Rounds &amp; Questions</h3>
+          <div id="roundsList"></div>
+        </div>
+
+        <div class="card">
+          <h3>Current Question Controls</h3>
+          <div id="currentQ" class="muted">No question opened yet.</div>
+          <div id="controls" style="display:none;">
+            <button id="hint1Btn" class="secondary">Release Hint 1</button>
+            <button id="hint2Btn" class="secondary">Release Hint 2</button>
+            <button id="lockBtn">Lock Answers</button>
+            <button id="revealBtn">Reveal Answer</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Submissions</h3>
+          <div id="submissionsList" class="muted">None yet.</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3>Participants</h3>
+          <div id="participantsList"></div>
+        </div>
+
+        <div class="card">
+          <h3>Standings</h3>
+          <div id="scoreboard"></div>
+        </div>
+
+        <div class="card">
+          <h3>Manual Score Adjustment</h3>
+          <select id="adjustParticipant"></select>
+          <input id="adjustAmount" type="number" placeholder="Amount (e.g. -1 or 2)">
+          <input id="adjustReason" placeholder="Reason">
+          <button id="adjustBtn">Apply</button>
+        </div>
+
+        <div class="card">
+          <h3>Recent Score Changes (click to undo)</h3>
+          <div id="ledgerLog" class="log">—</div>
+        </div>
+
+        <div class="card">
+          <h3>Phone a Friend</h3>
+          <select id="patParticipant"></select>
+          <button id="patBtn" class="secondary">Issue token</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/host.js"></script>
+</body>
+</html>

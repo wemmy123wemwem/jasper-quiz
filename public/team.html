@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Team — Quiz</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div id="join-screen" class="card">
+    <h2>Join the quiz</h2>
+    <input id="roomCode" placeholder="Room code" autocapitalize="characters">
+    <input id="teamName" placeholder="Team name">
+    <button id="joinBtn">Join</button>
+    <div id="joinError" class="muted"></div>
+  </div>
+
+  <div id="game-screen" style="display:none;">
+    <div class="card">
+      <h2 id="teamNameDisplay"></h2>
+      <div class="muted">Room <span id="roomCodeDisplay"></span></div>
+    </div>
+
+    <div id="lockoutCard" class="card lockout" style="display:none;">
+      <h2>You're sitting this one out</h2>
+      <p class="muted">The host has excluded you from this question.</p>
+    </div>
+
+    <div id="questionCard" class="card" style="display:none;">
+      <span id="statusBadge" class="badge"></span>
+      <h3 id="qBody"></h3>
+      <div id="optionsArea"></div>
+      <div id="hintsArea"></div>
+      <div id="submitArea" style="display:none;">
+        <button id="submitBtn">Submit answer</button>
+      </div>
+      <div id="submittedNote" class="muted" style="display:none;">Answer submitted ✓</div>
+    </div>
+
+    <div class="card">
+      <h3>Phone a Friend</h3>
+      <div id="patArea" class="muted">No tokens available.</div>
+    </div>
+
+    <div class="card">
+      <h3>Scoreboard</h3>
+      <div id="scoreboard"></div>
+    </div>
+  </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/team.js"></script>
+</body>
+</html>

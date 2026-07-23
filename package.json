@@ -1,0 +1,17 @@
+{
+  "name": "jasper-quiz",
+  "version": "1.0.0",
+  "description": "Private live quiz app for Jasper's 40th birthday",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.19.2",
+    "nanoid": "^3.3.7",
+    "socket.io": "^4.7.5"
+  }
+}
