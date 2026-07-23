@@ -191,6 +191,7 @@ io.on('connection', (socket) => {
     joinCommon(socket, session.id, id, 'team', token);
     io.to(roomHost(session.id)).emit('participant:joined', { id, type: 'team', name: teamName.trim() });
     ack({ ok: true, token, participant: { id, name: teamName.trim(), type: 'team' } });
+    sendCurrentQuestionTo(socket, session.id, id, 'team');
   });
 
   // --- Join as Jasper (one per session) ---
@@ -206,6 +207,7 @@ io.on('connection', (socket) => {
     joinCommon(socket, session.id, id, 'jasper', token);
     io.to(roomHost(session.id)).emit('participant:joined', { id, type: 'jasper', name: 'Jasper' });
     ack({ ok: true, token, participant: { id, name: 'Jasper', type: 'jasper' } });
+    sendCurrentQuestionTo(socket, session.id, id, 'jasper');
   });
 
   // --- Reconnect via stored token (team or jasper) ---
@@ -214,18 +216,20 @@ io.on('connection', (socket) => {
     if (!p) return ack({ ok: false, error: 'Session expired' });
     joinCommon(socket, p.session_id, p.id, p.type, token);
     ack({ ok: true, participant: { id: p.id, name: p.name, type: p.type } });
-    // Re-send current question state so their screen catches up.
-    const session = getSessionById(p.session_id);
-    if (session.current_question_id) {
-      const q = getQuestion(session.current_question_id);
-      const role = p.type;
-      if (isExcluded(q, p.id)) socket.emit('question:lockout', { questionId: q.id });
-      else socket.emit('question:state', questionPayloadFor(q, role));
-      // let them know if they already submitted
-      const sub = db.prepare('SELECT * FROM submissions WHERE question_id = ? AND participant_id = ?').get(q.id, p.id);
-      if (sub) socket.emit('submission:ack', { questionId: q.id, locked: !!sub.locked_at });
-    }
+    sendCurrentQuestionTo(socket, p.session_id, p.id, p.type);
   });
+
+  // Send current open question (if any) to a participant who just joined/reconnected,
+  // including whether they've already submitted, so late joiners aren't stuck on a blank screen.
+  function sendCurrentQuestionTo(sock, sessionId, participantId, role) {
+    const session = getSessionById(sessionId);
+    if (!session.current_question_id) return;
+    const q = getQuestion(session.current_question_id);
+    if (isExcluded(q, participantId)) return sock.emit('question:lockout', { questionId: q.id });
+    sock.emit('question:state', questionPayloadFor(q, role));
+    const sub = db.prepare('SELECT * FROM submissions WHERE question_id = ? AND participant_id = ?').get(q.id, participantId);
+    if (sub) sock.emit('submission:ack', { questionId: q.id, locked: !!sub.locked_at });
+  }
 
   // --- Projector (no auth needed, read-only) ---
   socket.on('join:projector', ({ roomCode }, ack) => {
