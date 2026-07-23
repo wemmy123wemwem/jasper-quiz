@@ -22,9 +22,10 @@
       <div class="muted">Room <span id="roomCodeDisplay"></span></div>
     </div>
 
-    <div id="lockoutCard" class="card lockout" style="display:none;">
-      <h2>You're sitting this one out</h2>
-      <p class="muted">The host has excluded you from this question.</p>
+    <div id="roundCard" class="card" style="display:none;">
+      <h3 id="roundTitle"></h3>
+      <div id="roundCompleteNote" class="muted" style="display:none;">This round is complete — answers are locked in.</div>
+      <div id="questionNav" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;"></div>
     </div>
 
     <div id="questionCard" class="card" style="display:none;">
@@ -35,8 +36,11 @@
       <div id="submitArea" style="display:none;">
         <button id="submitBtn">Submit answer</button>
       </div>
-      <div id="submittedNote" class="muted" style="display:none;">Answer submitted ✓</div>
+      <div id="submittedNote" class="muted" style="display:none;">Answer submitted ✓ — you can change it until this round ends.</div>
+      <div id="readOnlyNote" class="muted" style="display:none;"></div>
     </div>
+
+    <div id="noQuestionsYet" class="card muted">Waiting for the host to open the first question…</div>
 
     <div class="card">
       <h3>Phone a Friend</h3>

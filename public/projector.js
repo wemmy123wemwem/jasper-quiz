@@ -22,19 +22,32 @@ if (savedRoom) {
   });
 }
 
-socket.on('question:state', (q) => {
-  $('qTitle').textContent = q.public.title || '';
-  $('qBody').textContent = q.public.body || '';
+let currentProjectedQuestionId = null;
+
+socket.on('projector:state', (s) => {
   $('revealBox').style.display = 'none';
   $('submissionCount').textContent = '';
+  if (s.mode === 'blank' || !s.question) {
+    currentProjectedQuestionId = null;
+    $('qTitle').textContent = '';
+    $('qBody').textContent = "Waiting for the next question…";
+    return;
+  }
+  const q = s.question;
+  currentProjectedQuestionId = q.id;
+  $('qTitle').textContent = q.public.title || '';
+  $('qBody').textContent = q.public.body || '';
   if (q.status === 'revealed' && q.revealContent) {
     $('revealBox').style.display = 'block';
     $('revealBox').innerHTML = `<h2 style="color:var(--accent)">${q.revealContent.note || 'Revealed'}</h2>`;
   }
 });
 
-socket.on('submission:count', ({ count }) => {
-  $('submissionCount').textContent = `${count} answer(s) submitted`;
+socket.on('submission:count', ({ questionId, count }) => {
+  // Only reflect this on screen if it's for the question currently on display.
+  if (questionId === currentProjectedQuestionId) {
+    $('submissionCount').textContent = `${count} answer(s) submitted`;
+  }
 });
 
 socket.on('score:updated', (st) => {

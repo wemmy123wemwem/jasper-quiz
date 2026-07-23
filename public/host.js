@@ -41,7 +41,7 @@ function renderRounds() {
   box.innerHTML = '';
   rounds.forEach(r => {
     const h = document.createElement('h4');
-    h.textContent = r.title;
+    h.textContent = r.title + (r.completed ? ' — round complete' : '');
     box.appendChild(h);
     r.questions.forEach(q => {
       const row = document.createElement('div');
@@ -51,10 +51,38 @@ function renderRounds() {
       btn.textContent = `${q.public.title || q.id.slice(0,4)} [${q.status}]`;
       btn.onclick = () => socket.emit('host:openQuestion', { questionId: q.id }, () => {});
       row.appendChild(btn);
+
+      const projBtn = document.createElement('button');
+      projBtn.className = 'secondary';
+      projBtn.textContent = '📽 Show on projector';
+      projBtn.style.display = q.status === 'draft' ? 'none' : 'inline-block'; // can't show a question before it's opened
+      projBtn.onclick = () => {
+        socket.emit('host:setProjector', { mode: 'question', questionId: q.id }, (res) => {
+          if (res && res.ok) $('projectorNowShowing').textContent = q.public.title || 'Question';
+        });
+      };
+      row.appendChild(projBtn);
       box.appendChild(row);
     });
+    if (!r.completed) {
+      const completeBtn = document.createElement('button');
+      completeBtn.textContent = 'Complete round (locks all answers + scores this round)';
+      completeBtn.onclick = () => {
+        if (!confirm(`Complete "${r.title}"? Teams won't be able to change any answers in this round after this.`)) return;
+        socket.emit('host:completeRound', { roundId: r.id }, (res) => {
+          if (res && res.ok) { r.completed = true; renderRounds(); }
+        });
+      };
+      box.appendChild(completeBtn);
+    }
   });
 }
+
+$('blankProjectorBtn').onclick = () => {
+  socket.emit('host:setProjector', { mode: 'blank' }, (res) => {
+    if (res && res.ok) $('projectorNowShowing').textContent = 'blank / waiting screen';
+  });
+};
 
 // --- Current question state (host view includes both team/jasper content + answer key) ---
 socket.on('question:state', (q) => {
