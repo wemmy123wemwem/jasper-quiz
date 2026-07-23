@@ -127,23 +127,24 @@ function questionPayloadFor(question, role, participantId) {
   }
   if (role === 'team' || role === 'jasper') {
     const view = role === 'team' ? JSON.parse(question.team_view) : JSON.parse(question.jasper_view);
+    const fullHints = view.hints || [];
     let hasSubmitted = false;
+    let hintStage = 0;
     if (participantId) {
       const sub = db.prepare('SELECT * FROM submissions WHERE question_id = ? AND participant_id = ?').get(question.id, participantId);
       hasSubmitted = !!sub;
+      const hintRow = db.prepare('SELECT stage FROM participant_hints WHERE question_id = ? AND participant_id = ?').get(question.id, participantId);
+      hintStage = hintRow ? hintRow.stage : 0;
     }
-    return { ...base, view, hasSubmitted };
+    // Only ever send hints this participant has actually revealed — never the
+    // full list up front (a team shouldn't be able to see unrevealed hints).
+    const viewForClient = { ...view, hints: fullHints.slice(0, hintStage) };
+    return { ...base, view: viewForClient, hasSubmitted, hintStage, totalHints: fullHints.length };
   }
   // projector — public only, plus reveal content if revealed
   const payload = { ...base };
   if (question.status === 'revealed') payload.revealContent = JSON.parse(question.reveal_content);
   return payload;
-}
-
-function hintStageOf(question) {
-  if (question.status === 'hint2') return 2;
-  if (question.status === 'hint1') return 1;
-  return 0;
 }
 
 function roomHost(sid) { return `s:${sid}:host`; }
@@ -319,20 +320,6 @@ io.on('connection', (socket) => {
     ack && ack({ ok: true });
   });
 
-  socket.on('host:releaseHint', ({ questionId, stage }, ack) => {
-    if (!requireHost(socket)) return ack && ack({ ok: false, error: 'Not authorised' });
-    const q = getQuestion(questionId);
-    if (!q) return ack && ack({ ok: false, error: 'Question not found' });
-    const status = stage === 2 ? 'hint2' : 'hint1';
-    db.prepare('UPDATE questions SET status = ? WHERE id = ?').run(status, q.id);
-    try {
-      db.prepare('INSERT INTO hint_releases (id, question_id, stage, released_at) VALUES (?, ?, ?, ?)')
-        .run(nanoid(), q.id, stage, Date.now());
-    } catch (e) { /* already released, ignore unique constraint */ }
-    afterQuestionChange(getQuestion(q.id));
-    ack && ack({ ok: true });
-  });
-
   // "Lock" is now just a pacing marker the host can use during play (e.g. to
   // signal "no more hints coming"). It does NOT freeze editing or trigger
   // scoring any more — teams can still revise their answer for this question
@@ -378,7 +365,7 @@ io.on('connection', (socket) => {
       subs.forEach(sub => {
         const participant = getParticipant(sub.participant_id);
         const answer = JSON.parse(sub.answer);
-        const result = scoring.autoMark({ participantType: participant.type, answer, question: updatedQ });
+        const result = scoring.autoMark({ participantType: participant.type, answer, question: updatedQ, hintStage: sub.hint_stage_at_submit });
         if (result.status !== 'pending') {
           db.prepare('UPDATE submissions SET marked_status = ?, awarded_points = ? WHERE id = ?')
             .run(result.status, result.points, sub.id);
@@ -463,17 +450,6 @@ io.on('connection', (socket) => {
     ack && ack({ ok: true });
   });
 
-  // Phone a Friend token issuance (host controls, per brief's configurable rule)
-  socket.on('host:issuePatToken', ({ participantId, roundId, source }, ack) => {
-    if (!requireHost(socket)) return ack && ack({ ok: false, error: 'Not authorised' });
-    const id = nanoid();
-    db.prepare('INSERT INTO pat_tokens (id, session_id, round_id, participant_id, used, source) VALUES (?, ?, ?, ?, 0, ?)')
-      .run(id, socket.data.sessionId, roundId, participantId, source || 'base');
-    io.to(roomTeam(socket.data.sessionId, participantId)).emit('pat:issued', { id, roundId });
-    io.to(roomHost(socket.data.sessionId)).emit('pat:issued', { id, roundId, participantId });
-    ack && ack({ ok: true, tokenId: id });
-  });
-
   // ---------- Team / Jasper actions ----------
   socket.on('team:submitAnswer', ({ questionId, answer }, ack) => {
     if (!socket.data.participantId) return ack && ack({ ok: false, error: 'Not joined' });
@@ -484,7 +460,8 @@ io.on('connection', (socket) => {
     if (round.completed) return ack && ack({ ok: false, error: 'This round is complete — no further changes' });
     if (isExcluded(q, socket.data.participantId)) return ack && ack({ ok: false, error: 'You are excluded from this question' });
     const existing = db.prepare('SELECT * FROM submissions WHERE question_id = ? AND participant_id = ?').get(questionId, socket.data.participantId);
-    const stage = hintStageOf(q);
+    const hintRow = db.prepare('SELECT stage FROM participant_hints WHERE question_id = ? AND participant_id = ?').get(questionId, socket.data.participantId);
+    const stage = hintRow ? hintRow.stage : 0;
     if (existing) {
       // If this submission was already scored (e.g. host marked it, or an
       // earlier round-completion auto-marked it), reverse that score first —
@@ -509,13 +486,34 @@ io.on('connection', (socket) => {
     ack && ack({ ok: true });
   });
 
-  socket.on('team:usePatToken', ({ tokenId }, ack) => {
-    const tok = db.prepare('SELECT * FROM pat_tokens WHERE id = ? AND participant_id = ?').get(tokenId, socket.data.participantId);
-    if (!tok || tok.used) return ack && ack({ ok: false, error: 'Token not available' });
-    const round = getRoundById(tok.round_id);
-    if (round && round.completed) return ack && ack({ ok: false, error: 'This round is complete' });
-    db.prepare('UPDATE pat_tokens SET used = 1, used_at = ? WHERE id = ?').run(Date.now(), tokenId);
-    io.to(roomHost(socket.data.sessionId)).emit('pat:used', { tokenId, participantId: socket.data.participantId });
+  // Self-serve hint reveal: each participant reveals their own hints, one
+  // stage at a time, at their own score cost (handled at scoring time via
+  // hint_stage_at_submit) — no host involvement needed.
+  socket.on('team:revealHint', ({ questionId, stage }, ack) => {
+    if (!socket.data.participantId) return ack && ack({ ok: false, error: 'Not joined' });
+    const q = getQuestion(questionId);
+    if (!q || q.status === 'draft') return ack && ack({ ok: false, error: 'Question not open yet' });
+    if (q.status === 'revealed') return ack && ack({ ok: false, error: 'Answer already revealed' });
+    const round = getRoundById(q.round_id);
+    if (round.completed) return ack && ack({ ok: false, error: 'This round is complete' });
+    if (isExcluded(q, socket.data.participantId)) return ack && ack({ ok: false, error: 'You are excluded from this question' });
+    const role = socket.data.role;
+    const view = role === 'jasper' ? JSON.parse(q.jasper_view) : JSON.parse(q.team_view);
+    const totalHints = (view.hints || []).length;
+    if (stage !== 1 && stage !== 2) return ack && ack({ ok: false, error: 'Invalid hint stage' });
+    if (stage > totalHints) return ack && ack({ ok: false, error: 'No hint at that stage' });
+    const current = db.prepare('SELECT stage FROM participant_hints WHERE question_id = ? AND participant_id = ?').get(questionId, socket.data.participantId);
+    const currentStage = current ? current.stage : 0;
+    if (stage !== currentStage + 1) return ack && ack({ ok: false, error: 'Reveal hints in order' });
+    if (current) {
+      db.prepare('UPDATE participant_hints SET stage = ?, revealed_at = ? WHERE question_id = ? AND participant_id = ?')
+        .run(stage, Date.now(), questionId, socket.data.participantId);
+    } else {
+      db.prepare('INSERT INTO participant_hints (question_id, participant_id, stage, revealed_at) VALUES (?, ?, ?, ?)')
+        .run(questionId, socket.data.participantId, stage, Date.now());
+    }
+    // Only this participant's own view changes — send them their updated round state.
+    socket.emit('round:state', roundStateFor(q.round_id, role, socket.data.participantId));
     ack && ack({ ok: true });
   });
 });

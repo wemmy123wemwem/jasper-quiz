@@ -98,6 +98,17 @@ CREATE TABLE IF NOT EXISTS hint_releases (
   UNIQUE(question_id, stage)
 );
 
+-- Per-participant, self-served hint reveals (replaces the old host-driven
+-- global hint release — each team now reveals their own hints, at their own
+-- score cost, independently of every other team).
+CREATE TABLE IF NOT EXISTS participant_hints (
+  question_id TEXT NOT NULL,
+  participant_id TEXT NOT NULL,
+  stage INTEGER NOT NULL DEFAULT 0,
+  revealed_at INTEGER,
+  PRIMARY KEY (question_id, participant_id)
+);
+
 CREATE TABLE IF NOT EXISTS pat_tokens (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,

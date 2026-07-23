@@ -22,7 +22,7 @@ function valueForHintStage(scoring, hintStage) {
  * Does NOT write to the ledger — caller does that so manual overrides
  * can reuse the same path.
  */
-function autoMark({ participantType, answer, question }) {
+function autoMark({ participantType, answer, question, hintStage = 0 }) {
   const scoring = JSON.parse(question.scoring);
   const answerKey = JSON.parse(question.answer_key);
   const accepted = JSON.parse(question.accepted_answers || '[]');
@@ -47,7 +47,7 @@ function autoMark({ participantType, answer, question }) {
     return { status: 'pending', points: null, reason: 'requires manual adjudication' };
   }
 
-  const base = participantType === 'jasper' ? (scoring.jasper_base ?? -scoring.team_base) : valueForHintStage(scoring, 0);
+  const base = participantType === 'jasper' ? (scoring.jasper_base ?? -scoring.team_base) : valueForHintStage(scoring, hintStage);
 
   if (isCorrect) {
     const points = participantType === 'jasper' ? (scoring.jasper_correct_points ?? Math.abs(scoring.jasper_base ?? 0)) : base;
