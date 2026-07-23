@@ -110,8 +110,6 @@ function refreshRoundListStatuses() {
   renderRounds();
 }
 
-$('hint1Btn').onclick = () => currentQuestion && socket.emit('host:releaseHint', { questionId: currentQuestion.id, stage: 1 });
-$('hint2Btn').onclick = () => currentQuestion && socket.emit('host:releaseHint', { questionId: currentQuestion.id, stage: 2 });
 $('lockBtn').onclick = () => currentQuestion && socket.emit('host:lockQuestion', { questionId: currentQuestion.id });
 $('revealBtn').onclick = () => currentQuestion && socket.emit('host:revealQuestion', { questionId: currentQuestion.id });
 $('pauseBtn').onclick = () => socket.emit('host:pauseResume', { pause: true });

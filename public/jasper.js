@@ -78,7 +78,7 @@ function renderSelectedQuestion() {
   selectedOption = q.myAnswer != null ? q.myAnswer.value : null;
 
   $('statusBadge').textContent = q.status.toUpperCase();
-  $('statusBadge').className = 'badge ' + (['open', 'hint1', 'hint2'].includes(q.status) ? 'open' : q.status === 'locked' ? 'locked' : q.status === 'revealed' ? 'revealed' : '');
+  $('statusBadge').className = 'badge ' + (q.status === 'open' ? 'open' : q.status === 'locked' ? 'locked' : q.status === 'revealed' ? 'revealed' : '');
   $('qBody').textContent = q.view.body;
 
   const optArea = $('optionsArea');
@@ -108,10 +108,21 @@ function renderSelectedQuestion() {
 
   const hintsArea = $('hintsArea');
   hintsArea.innerHTML = '';
-  const stage = q.status === 'hint2' ? 2 : q.status === 'hint1' ? 1 : 0;
-  (q.view.hints || []).slice(0, stage).forEach((h, i) => {
+  (q.view.hints || []).forEach((h, i) => {
     const d = document.createElement('div'); d.className = 'hint'; d.textContent = `Hint ${i + 1}: ${h}`; hintsArea.appendChild(d);
   });
+  const canRevealMore = editable && q.hintStage < q.totalHints;
+  if (canRevealMore) {
+    const nextStage = q.hintStage + 1;
+    const b = document.createElement('button');
+    b.className = 'secondary';
+    b.textContent = `Reveal hint ${nextStage} (costs points)`;
+    b.onclick = () => {
+      if (!confirm(`Reveal hint ${nextStage}? This will reduce the points you can score on this question.`)) return;
+      socket.emit('team:revealHint', { questionId: q.id, stage: nextStage }, (res) => { if (!res.ok) alert(res.error); });
+    };
+    hintsArea.appendChild(b);
+  }
 
   const submitArea = $('submitArea');
   const submittedNote = $('submittedNote');
