@@ -10,7 +10,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+}));
 app.get('/host', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'host.html')));
 app.get('/team', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'team.html')));
 app.get('/jasper', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'jasper.html')));
