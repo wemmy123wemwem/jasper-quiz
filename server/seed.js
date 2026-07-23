@@ -31,9 +31,9 @@ content.rounds.forEach((round, ri) => {
     const questionId = nanoid();
     db.prepare(`INSERT INTO questions
       (id, round_id, session_id, sequence, status, public_display, team_view, jasper_view,
-       excluded_participant_ids, answer_key, accepted_answers, marking_notes, scoring, assets, reveal_content, host_notes)
+       excluded_participant_ids, answer_key, accepted_answers, marking_notes, scoring, assets, reveal_content, host_notes, visibility)
       VALUES (@id, @round_id, @session_id, @sequence, 'draft', @public_display, @team_view, @jasper_view,
-       @excluded_participant_ids, @answer_key, @accepted_answers, '', @scoring, @assets, @reveal_content, '')`)
+       @excluded_participant_ids, @answer_key, @accepted_answers, '', @scoring, @assets, @reveal_content, '', @visibility)`)
       .run({
         id: questionId,
         round_id: roundId,
@@ -47,7 +47,8 @@ content.rounds.forEach((round, ri) => {
         accepted_answers: JSON.stringify(q.accepted_answers || []),
         scoring: JSON.stringify(q.scoring),
         assets: JSON.stringify(q.assets || []),
-        reveal_content: JSON.stringify(q.reveal_content || {})
+        reveal_content: JSON.stringify(q.reveal_content || {}),
+        visibility: q.visibility || 'both'
       });
   });
 });

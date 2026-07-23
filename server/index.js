@@ -20,9 +20,15 @@ app.get('/projector', (req, res) => res.sendFile(path.join(__dirname, '..', 'pub
 app.get('/setup-jasper-quiz-2026', (req, res) => {
   try {
     const fs = require('fs');
-    const contentPath = fs.existsSync(path.join(__dirname, '..', 'content', 'session.json'))
-      ? path.join(__dirname, '..', 'content', 'session.json')
-      : path.join(__dirname, '..', 'content', 'session.example.json');
+    const requestedFile = req.query.file;
+    let contentPath;
+    if (requestedFile) {
+      contentPath = path.join(__dirname, '..', 'content', requestedFile);
+    } else if (fs.existsSync(path.join(__dirname, '..', 'content', 'session.json'))) {
+      contentPath = path.join(__dirname, '..', 'content', 'session.json');
+    } else {
+      contentPath = path.join(__dirname, '..', 'content', 'session.example.json');
+    }
     const content = JSON.parse(fs.readFileSync(contentPath, 'utf8'));
 
     function randomCode(len = 5) {
@@ -46,9 +52,9 @@ app.get('/setup-jasper-quiz-2026', (req, res) => {
         const questionId = nanoid();
         db.prepare(`INSERT INTO questions
           (id, round_id, session_id, sequence, status, public_display, team_view, jasper_view,
-           excluded_participant_ids, answer_key, accepted_answers, marking_notes, scoring, assets, reveal_content, host_notes)
+           excluded_participant_ids, answer_key, accepted_answers, marking_notes, scoring, assets, reveal_content, host_notes, visibility)
           VALUES (@id, @round_id, @session_id, @sequence, 'draft', @public_display, @team_view, @jasper_view,
-           @excluded_participant_ids, @answer_key, @accepted_answers, '', @scoring, @assets, @reveal_content, '')`)
+           @excluded_participant_ids, @answer_key, @accepted_answers, '', @scoring, @assets, @reveal_content, '', @visibility)`)
           .run({
             id: questionId,
             round_id: roundId,
@@ -62,7 +68,8 @@ app.get('/setup-jasper-quiz-2026', (req, res) => {
             accepted_answers: JSON.stringify(q.accepted_answers || []),
             scoring: JSON.stringify(q.scoring),
             assets: JSON.stringify(q.assets || []),
-            reveal_content: JSON.stringify(q.reveal_content || {})
+            reveal_content: JSON.stringify(q.reveal_content || {}),
+            visibility: q.visibility || 'both'
           });
       });
     });
@@ -156,6 +163,11 @@ function roundStateFor(roundId, role, participantId) {
   const questions = getQuestionsForRound(roundId)
     .filter(q => q.status !== 'draft')
     .filter(q => !isExcluded(q, participantId))
+    .filter(q => {
+      if (q.visibility === 'jasper_only') return role === 'jasper';
+      if (q.visibility === 'team_only') return role === 'team';
+      return true;
+    })
     .map(q => {
       const payload = questionPayloadFor(q, role, participantId);
       const sub = db.prepare('SELECT answer FROM submissions WHERE question_id = ? AND participant_id = ?').get(q.id, participantId);

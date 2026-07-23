@@ -117,7 +117,8 @@ const migrations = [
   `ALTER TABLE rounds ADD COLUMN completed INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE rounds ADD COLUMN completed_at INTEGER`,
   `ALTER TABLE sessions ADD COLUMN projector_mode TEXT NOT NULL DEFAULT 'blank'`,
-  `ALTER TABLE sessions ADD COLUMN projector_question_id TEXT`
+  `ALTER TABLE sessions ADD COLUMN projector_question_id TEXT`,
+  `ALTER TABLE questions ADD COLUMN visibility TEXT NOT NULL DEFAULT 'both'` // 'both' | 'jasper_only' | 'team_only'
 ];
 migrations.forEach(sql => {
   try { db.exec(sql); } catch (e) { /* column already exists — fine */ }
