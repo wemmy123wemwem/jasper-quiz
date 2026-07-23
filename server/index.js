@@ -92,6 +92,7 @@ const getSessionById = (id) => db.prepare('SELECT * FROM sessions WHERE id = ?')
 const getParticipantByToken = (token) => db.prepare('SELECT * FROM participants WHERE session_token = ?').get(token);
 const getParticipant = (id) => db.prepare('SELECT * FROM participants WHERE id = ?').get(id);
 const getRounds = (sessionId) => db.prepare('SELECT * FROM rounds WHERE session_id = ? ORDER BY sequence').all(sessionId);
+const getRoundById = (id) => db.prepare('SELECT * FROM rounds WHERE id = ?').get(id);
 const getQuestionsForRound = (roundId) => db.prepare('SELECT * FROM questions WHERE round_id = ? ORDER BY sequence').all(roundId);
 const getQuestion = (id) => db.prepare('SELECT * FROM questions WHERE id = ?').get(id);
 const getExcludedIds = (q) => JSON.parse(q.excluded_participant_ids || '[]');
@@ -103,7 +104,7 @@ function isExcluded(question, participantId) {
 // Build the payload sent to a given role for a question. This is the ONLY
 // place role-specific content is assembled — never send the raw question
 // row to a team/jasper/projector client.
-function questionPayloadFor(question, role) {
+function questionPayloadFor(question, role, participantId) {
   const base = {
     id: question.id,
     status: question.status,
@@ -115,8 +116,15 @@ function questionPayloadFor(question, role) {
       revealContent: JSON.parse(question.reveal_content), hostNotes: question.host_notes,
       excludedParticipantIds: getExcludedIds(question) };
   }
-  if (role === 'team') return { ...base, view: JSON.parse(question.team_view) };
-  if (role === 'jasper') return { ...base, view: JSON.parse(question.jasper_view) };
+  if (role === 'team' || role === 'jasper') {
+    const view = role === 'team' ? JSON.parse(question.team_view) : JSON.parse(question.jasper_view);
+    let hasSubmitted = false;
+    if (participantId) {
+      const sub = db.prepare('SELECT * FROM submissions WHERE question_id = ? AND participant_id = ?').get(question.id, participantId);
+      hasSubmitted = !!sub;
+    }
+    return { ...base, view, hasSubmitted };
+  }
   // projector — public only, plus reveal content if revealed
   const payload = { ...base };
   if (question.status === 'revealed') payload.revealContent = JSON.parse(question.reveal_content);
@@ -140,26 +148,36 @@ function broadcastStandings(sessionId) {
   io.to(roomHost(sessionId)).to(roomProjector(sessionId)).to(roomAllPlayers(sessionId)).emit('score:updated', st);
 }
 
-function broadcastQuestionState(question) {
-  const sessionId = question.session_id;
-  io.to(roomHost(sessionId)).emit('question:state', questionPayloadFor(question, 'host'));
-  io.to(roomProjector(sessionId)).emit('question:state', questionPayloadFor(question, 'projector'));
-  // teams: everyone except excluded, plus jasper separately
-  const teams = db.prepare("SELECT * FROM participants WHERE session_id = ? AND type = 'team'").all(sessionId);
+// Build the round payload for one participant: every non-draft (i.e. ever-opened)
+// question in the round they're not excluded from, each with their own answer
+// echoed back so the team app can pre-fill it for editing.
+function roundStateFor(roundId, role, participantId) {
+  const round = getRoundById(roundId);
+  const questions = getQuestionsForRound(roundId)
+    .filter(q => q.status !== 'draft')
+    .filter(q => !isExcluded(q, participantId))
+    .map(q => {
+      const payload = questionPayloadFor(q, role, participantId);
+      const sub = db.prepare('SELECT answer FROM submissions WHERE question_id = ? AND participant_id = ?').get(q.id, participantId);
+      payload.myAnswer = sub ? JSON.parse(sub.answer) : null;
+      return payload;
+    });
+  return { roundId, title: round.title, completed: !!round.completed, questions };
+}
+
+// After any change to a question (opened, hint released, locked, revealed,
+// exclusion toggled): tell the host its detail view, and push every team/Jasper
+// in that round their updated round-wide question list. The projector is
+// deliberately NOT touched here — it's controlled independently by the host.
+function afterQuestionChange(question) {
+  io.to(roomHost(question.session_id)).emit('question:state', questionPayloadFor(question, 'host'));
+  const teams = db.prepare("SELECT * FROM participants WHERE session_id = ? AND type = 'team'").all(question.session_id);
   teams.forEach(t => {
-    if (isExcluded(question, t.id)) {
-      io.to(roomTeam(sessionId, t.id)).emit('question:lockout', { questionId: question.id });
-    } else {
-      io.to(roomTeam(sessionId, t.id)).emit('question:state', questionPayloadFor(question, 'team'));
-    }
+    io.to(roomTeam(question.session_id, t.id)).emit('round:state', roundStateFor(question.round_id, 'team', t.id));
   });
-  const jasperP = db.prepare("SELECT * FROM participants WHERE session_id = ? AND type = 'jasper'").get(sessionId);
+  const jasperP = db.prepare("SELECT * FROM participants WHERE session_id = ? AND type = 'jasper'").get(question.session_id);
   if (jasperP) {
-    if (isExcluded(question, jasperP.id)) {
-      io.to(roomJasper(sessionId)).emit('question:lockout', { questionId: question.id });
-    } else {
-      io.to(roomJasper(sessionId)).emit('question:state', questionPayloadFor(question, 'jasper'));
-    }
+    io.to(roomJasper(question.session_id)).emit('round:state', roundStateFor(question.round_id, 'jasper', jasperP.id));
   }
 }
 
@@ -191,7 +209,7 @@ io.on('connection', (socket) => {
     joinCommon(socket, session.id, id, 'team', token);
     io.to(roomHost(session.id)).emit('participant:joined', { id, type: 'team', name: teamName.trim() });
     ack({ ok: true, token, participant: { id, name: teamName.trim(), type: 'team' } });
-    sendCurrentQuestionTo(socket, session.id, id, 'team');
+    sendRoundStateTo(socket, session.id, id, 'team');
   });
 
   // --- Join as Jasper (one per session) ---
@@ -207,7 +225,7 @@ io.on('connection', (socket) => {
     joinCommon(socket, session.id, id, 'jasper', token);
     io.to(roomHost(session.id)).emit('participant:joined', { id, type: 'jasper', name: 'Jasper' });
     ack({ ok: true, token, participant: { id, name: 'Jasper', type: 'jasper' } });
-    sendCurrentQuestionTo(socket, session.id, id, 'jasper');
+    sendRoundStateTo(socket, session.id, id, 'jasper');
   });
 
   // --- Reconnect via stored token (team or jasper) ---
@@ -216,19 +234,17 @@ io.on('connection', (socket) => {
     if (!p) return ack({ ok: false, error: 'Session expired' });
     joinCommon(socket, p.session_id, p.id, p.type, token);
     ack({ ok: true, participant: { id: p.id, name: p.name, type: p.type } });
-    sendCurrentQuestionTo(socket, p.session_id, p.id, p.type);
+    sendRoundStateTo(socket, p.session_id, p.id, p.type);
   });
 
-  // Send current open question (if any) to a participant who just joined/reconnected,
-  // including whether they've already submitted, so late joiners aren't stuck on a blank screen.
-  function sendCurrentQuestionTo(sock, sessionId, participantId, role) {
+  // Send the current round's question list (if any question has ever been
+  // opened) to a participant who just joined/reconnected, so late joiners
+  // land straight on the right question(s) instead of a blank screen.
+  function sendRoundStateTo(sock, sessionId, participantId, role) {
     const session = getSessionById(sessionId);
     if (!session.current_question_id) return;
     const q = getQuestion(session.current_question_id);
-    if (isExcluded(q, participantId)) return sock.emit('question:lockout', { questionId: q.id });
-    sock.emit('question:state', questionPayloadFor(q, role));
-    const sub = db.prepare('SELECT * FROM submissions WHERE question_id = ? AND participant_id = ?').get(q.id, participantId);
-    if (sub) sock.emit('submission:ack', { questionId: q.id, locked: !!sub.locked_at });
+    sock.emit('round:state', roundStateFor(q.round_id, role, participantId));
   }
 
   // --- Projector (no auth needed, read-only) ---
@@ -239,9 +255,11 @@ io.on('connection', (socket) => {
     socket.data.role = 'projector';
     socket.join(roomProjector(session.id));
     ack({ ok: true, session: { roomCode: session.room_code, status: session.status } });
-    if (session.current_question_id) {
-      const q = getQuestion(session.current_question_id);
-      socket.emit('question:state', questionPayloadFor(q, 'projector'));
+    if (session.projector_mode === 'question' && session.projector_question_id) {
+      const q = getQuestion(session.projector_question_id);
+      socket.emit('projector:state', { mode: 'question', question: questionPayloadFor(q, 'projector') });
+    } else {
+      socket.emit('projector:state', { mode: 'blank' });
     }
     socket.emit('score:updated', scoring.standings(session.id));
   });
@@ -271,10 +289,17 @@ io.on('connection', (socket) => {
     if (!requireHost(socket)) return ack && ack({ ok: false, error: 'Not authorised' });
     const q = getQuestion(questionId);
     if (!q) return ack && ack({ ok: false, error: 'Question not found' });
+    const session = getSessionById(q.session_id);
+    // Already the live question — just refresh the host's own view, don't reset
+    // it or re-broadcast to teams (that would wipe their submitted-answer screen).
+    if (session.current_question_id === q.id) {
+      socket.emit('question:state', questionPayloadFor(q, 'host'));
+      return ack && ack({ ok: true });
+    }
     db.prepare("UPDATE questions SET status = 'open', opened_at = ? WHERE id = ?").run(Date.now(), q.id);
     db.prepare('UPDATE sessions SET current_question_id = ?, status = ? WHERE id = ?')
       .run(q.id, 'live', q.session_id);
-    broadcastQuestionState(getQuestion(q.id));
+    afterQuestionChange(getQuestion(q.id));
     ack && ack({ ok: true });
   });
 
@@ -288,37 +313,67 @@ io.on('connection', (socket) => {
       db.prepare('INSERT INTO hint_releases (id, question_id, stage, released_at) VALUES (?, ?, ?, ?)')
         .run(nanoid(), q.id, stage, Date.now());
     } catch (e) { /* already released, ignore unique constraint */ }
-    broadcastQuestionState(getQuestion(q.id));
+    afterQuestionChange(getQuestion(q.id));
     ack && ack({ ok: true });
   });
 
+  // "Lock" is now just a pacing marker the host can use during play (e.g. to
+  // signal "no more hints coming"). It does NOT freeze editing or trigger
+  // scoring any more — teams can still revise their answer for this question
+  // right up until the whole round is completed. All auto-marking happens
+  // once, at host:completeRound, so nothing gets scored twice.
   socket.on('host:lockQuestion', ({ questionId }, ack) => {
     if (!requireHost(socket)) return ack && ack({ ok: false, error: 'Not authorised' });
     const q = getQuestion(questionId);
+    if (!q) return ack && ack({ ok: false, error: 'Question not found' });
     db.prepare("UPDATE questions SET status = 'locked', locked_at = ? WHERE id = ?").run(Date.now(), q.id);
-    // Auto-mark any eligible submissions now that answers are locked.
-    const subs = db.prepare('SELECT * FROM submissions WHERE question_id = ?').all(q.id);
-    const updated = getQuestion(q.id);
-    subs.forEach(sub => {
-      const participant = getParticipant(sub.participant_id);
-      const answer = JSON.parse(sub.answer);
-      const result = scoring.autoMark({ participantType: participant.type, answer, question: updated });
-      if (result.status !== 'pending') {
-        db.prepare('UPDATE submissions SET marked_status = ?, awarded_points = ? WHERE id = ?')
-          .run(result.status, result.points, sub.id);
-        scoring.awardPoints({ sessionId: updated.session_id, participantId: participant.id, questionId: q.id, amount: result.points, reason: result.reason });
-      }
-    });
-    broadcastQuestionState(getQuestion(q.id));
-    broadcastStandings(updated.session_id);
+    afterQuestionChange(getQuestion(q.id));
     ack && ack({ ok: true });
   });
 
+  // Reveal the answer for this question. Once revealed, teams can no longer
+  // edit their submission for it (they've seen the answer) — but the round
+  // as a whole isn't scored yet; that still happens at host:completeRound.
   socket.on('host:revealQuestion', ({ questionId }, ack) => {
     if (!requireHost(socket)) return ack && ack({ ok: false, error: 'Not authorised' });
     const q = getQuestion(questionId);
+    if (!q) return ack && ack({ ok: false, error: 'Question not found' });
     db.prepare("UPDATE questions SET status = 'revealed', revealed_at = ? WHERE id = ?").run(Date.now(), q.id);
-    broadcastQuestionState(getQuestion(q.id));
+    afterQuestionChange(getQuestion(q.id));
+    ack && ack({ ok: true });
+  });
+
+  // Complete a round: freezes every question in it (auto-marks any pending,
+  // auto-markable submissions exactly once), and blocks any further answer
+  // edits or Phone-a-Friend token use for that round from this point on.
+  socket.on('host:completeRound', ({ roundId }, ack) => {
+    if (!requireHost(socket)) return ack && ack({ ok: false, error: 'Not authorised' });
+    const round = getRoundById(roundId);
+    if (!round) return ack && ack({ ok: false, error: 'Round not found' });
+    if (round.completed) return ack && ack({ ok: true }); // already done, no-op
+    const questions = getQuestionsForRound(roundId);
+    questions.forEach(q => {
+      if (q.status !== 'revealed') {
+        db.prepare("UPDATE questions SET status = 'locked', locked_at = COALESCE(locked_at, ?) WHERE id = ?").run(Date.now(), q.id);
+      }
+      // Auto-mark only submissions still pending — keeps this safe to call once.
+      const subs = db.prepare("SELECT * FROM submissions WHERE question_id = ? AND marked_status = 'pending'").all(q.id);
+      const updatedQ = getQuestion(q.id);
+      subs.forEach(sub => {
+        const participant = getParticipant(sub.participant_id);
+        const answer = JSON.parse(sub.answer);
+        const result = scoring.autoMark({ participantType: participant.type, answer, question: updatedQ });
+        if (result.status !== 'pending') {
+          db.prepare('UPDATE submissions SET marked_status = ?, awarded_points = ? WHERE id = ?')
+            .run(result.status, result.points, sub.id);
+          scoring.awardPoints({ sessionId: updatedQ.session_id, participantId: participant.id, questionId: q.id, amount: result.points, reason: result.reason });
+        }
+      });
+    });
+    db.prepare('UPDATE rounds SET completed = 1, completed_at = ? WHERE id = ?').run(Date.now(), roundId);
+    // Refresh every question's broadcast so host + teams see final locked state.
+    getQuestionsForRound(roundId).forEach(q => afterQuestionChange(q));
+    broadcastStandings(round.session_id);
     ack && ack({ ok: true });
   });
 
@@ -356,7 +411,26 @@ io.on('connection', (socket) => {
     const ids = new Set(getExcludedIds(q));
     if (excluded) ids.add(participantId); else ids.delete(participantId);
     db.prepare('UPDATE questions SET excluded_participant_ids = ? WHERE id = ?').run(JSON.stringify([...ids]), questionId);
-    broadcastQuestionState(getQuestion(questionId));
+    afterQuestionChange(getQuestion(questionId));
+    ack && ack({ ok: true });
+  });
+
+  // Projector control — fully independent of what's live for teams. The host
+  // can point the shared screen at any question (any status, including ones
+  // from earlier in the night) or blank it, without affecting what teams see
+  // or can currently answer.
+  socket.on('host:setProjector', ({ mode, questionId }, ack) => {
+    if (!requireHost(socket)) return ack && ack({ ok: false, error: 'Not authorised' });
+    const sessionId = socket.data.sessionId;
+    if (mode === 'blank') {
+      db.prepare('UPDATE sessions SET projector_mode = ?, projector_question_id = NULL WHERE id = ?').run('blank', sessionId);
+      io.to(roomProjector(sessionId)).emit('projector:state', { mode: 'blank' });
+      return ack && ack({ ok: true });
+    }
+    const q = getQuestion(questionId);
+    if (!q) return ack && ack({ ok: false, error: 'Question not found' });
+    db.prepare('UPDATE sessions SET projector_mode = ?, projector_question_id = ? WHERE id = ?').run('question', q.id, sessionId);
+    io.to(roomProjector(sessionId)).emit('projector:state', { mode: 'question', question: questionPayloadFor(q, 'projector') });
     ack && ack({ ok: true });
   });
 
@@ -382,14 +456,26 @@ io.on('connection', (socket) => {
   socket.on('team:submitAnswer', ({ questionId, answer }, ack) => {
     if (!socket.data.participantId) return ack && ack({ ok: false, error: 'Not joined' });
     const q = getQuestion(questionId);
-    if (!q || !['open', 'hint1', 'hint2'].includes(q.status)) return ack && ack({ ok: false, error: 'Question not open' });
+    if (!q || q.status === 'draft') return ack && ack({ ok: false, error: 'Question not open yet' });
+    if (q.status === 'revealed') return ack && ack({ ok: false, error: 'Answer revealed — no further changes' });
+    const round = getRoundById(q.round_id);
+    if (round.completed) return ack && ack({ ok: false, error: 'This round is complete — no further changes' });
     if (isExcluded(q, socket.data.participantId)) return ack && ack({ ok: false, error: 'You are excluded from this question' });
     const existing = db.prepare('SELECT * FROM submissions WHERE question_id = ? AND participant_id = ?').get(questionId, socket.data.participantId);
-    if (existing && existing.locked_at) return ack && ack({ ok: false, error: 'Answer already locked' });
     const stage = hintStageOf(q);
     if (existing) {
-      db.prepare('UPDATE submissions SET answer = ?, hint_stage_at_submit = ?, submitted_at = ? WHERE id = ?')
-        .run(JSON.stringify(answer), stage, Date.now(), existing.id);
+      // If this submission was already scored (e.g. host marked it, or an
+      // earlier round-completion auto-marked it), reverse that score first —
+      // the edit means it needs marking again from scratch.
+      if (existing.marked_status !== 'pending' && existing.awarded_points != null) {
+        scoring.awardPoints({
+          sessionId: q.session_id, participantId: socket.data.participantId, questionId: q.id,
+          amount: -existing.awarded_points, reason: 'Answer edited — previous score reversed'
+        });
+        broadcastStandings(q.session_id);
+      }
+      db.prepare('UPDATE submissions SET answer = ?, hint_stage_at_submit = ?, submitted_at = ?, marked_status = ?, awarded_points = NULL WHERE id = ?')
+        .run(JSON.stringify(answer), stage, Date.now(), 'pending', existing.id);
     } else {
       db.prepare(`INSERT INTO submissions (id, question_id, participant_id, answer, hint_stage_at_submit, submitted_at)
                   VALUES (?, ?, ?, ?, ?, ?)`).run(nanoid(), questionId, socket.data.participantId, JSON.stringify(answer), stage, Date.now());
@@ -404,6 +490,8 @@ io.on('connection', (socket) => {
   socket.on('team:usePatToken', ({ tokenId }, ack) => {
     const tok = db.prepare('SELECT * FROM pat_tokens WHERE id = ? AND participant_id = ?').get(tokenId, socket.data.participantId);
     if (!tok || tok.used) return ack && ack({ ok: false, error: 'Token not available' });
+    const round = getRoundById(tok.round_id);
+    if (round && round.completed) return ack && ack({ ok: false, error: 'This round is complete' });
     db.prepare('UPDATE pat_tokens SET used = 1, used_at = ? WHERE id = ?').run(Date.now(), tokenId);
     io.to(roomHost(socket.data.sessionId)).emit('pat:used', { tokenId, participantId: socket.data.participantId });
     ack && ack({ ok: true });

@@ -109,4 +109,18 @@ CREATE TABLE IF NOT EXISTS pat_tokens (
 );
 `);
 
+// Schema migrations for features added after the initial release.
+// ALTER TABLE ADD COLUMN fails if the column already exists — that's fine,
+// it just means this DB file was already migrated. This makes it safe to
+// re-run every time the server starts, including on Render's persisted disk.
+const migrations = [
+  `ALTER TABLE rounds ADD COLUMN completed INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE rounds ADD COLUMN completed_at INTEGER`,
+  `ALTER TABLE sessions ADD COLUMN projector_mode TEXT NOT NULL DEFAULT 'blank'`,
+  `ALTER TABLE sessions ADD COLUMN projector_question_id TEXT`
+];
+migrations.forEach(sql => {
+  try { db.exec(sql); } catch (e) { /* column already exists — fine */ }
+});
+
 module.exports = db;
